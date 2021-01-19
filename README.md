@@ -1,5 +1,5 @@
 # Quick Arg Parser
-Tired of unwieldy tools like _getopt_ or _argp_? Quick Arg Parser is asingle header C++ library for parsing command line arguments and options with minimal amount of code. All you have to do is to instantiate a class inheriting from the `MainArguments` type and access its members.
+Tired of unwieldy tools like _getopt_ or _argp_? Quick Arg Parser is a single header C++ library for parsing command line arguments and options with minimal amount of code. All you have to do is to instantiate a class inheriting from the `MainArguments` type and access its members.
 
 ```C++
 #include "quick_arg_parser.hpp"
@@ -24,7 +24,7 @@ And it can deal with the following call:
 ./a.out . --efficiency 9 -v
 ```
 
-A more detailed example of usage you can try for yourself is [here](https://github.com/Dugy/quick_arg_parser/blob/main/quick_arg_parser_test_manual.cpp).
+A longer example of usage is [here](https://github.com/Dugy/quick_arg_parser/blob/main/quick_arg_parser_test_manual.cpp).
 
 ## More detailed information
 The library requires C++17. I have tested it on GCC and Clang. It should work on Windows, but the command-line arguments will not be Windows-like.
@@ -49,6 +49,8 @@ Optional arguments are declared as follows:
 ```C++
 TypeName varName = argument(0) = "default value";
 ```
+
+Anything behind a ` -- ` separator will be considered an argument, no matter how closely it resembles an option.
 
 ### Automatic help entry
 Calling the program with `--help` or `-?` will print the expected number of arguments and all options, also listing their help entries if set.
