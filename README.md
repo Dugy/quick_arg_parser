@@ -4,7 +4,7 @@ Tired of unwieldy tools like _getopt_ or _argp_? Quick Arg Parser is asingle hea
 ```C++
 #include "quick_arg_parser.hpp"
 
-struct Args : MainArguments<MainArguments> {
+struct Args : MainArguments<Args> {
 	std::string folder = argument(0) = ".";
 	int efficiency = option("efficiency", 'e', "The intended efficiency") = 5;
 	bool verbose = option('v');
@@ -23,6 +23,8 @@ And it can deal with the following call:
 ```
 ./a.out . --efficiency 9 -v
 ```
+
+A more detailed example of usage you can try for yourself is [here](https://github.com/Dugy/quick_arg_parser/blob/main/quick_arg_parser_test_manual.cpp).
 
 ## More detailed information
 The library requires C++17. I have tested it on GCC and Clang. It should work on Windows, but the command-line arguments will not be Windows-like.
