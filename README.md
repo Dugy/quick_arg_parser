@@ -52,6 +52,10 @@ TypeName varName = argument(0) = "default value";
 
 Anything behind a ` -- ` separator will be considered an argument, no matter how closely it resembles an option.
 
+If you expect an unlimited number of arguments, you can access them all through `MainArguments`' public variable named `arguments`. The first one in the vector is the first argument after the program name.
+
+To implement a behaviour where the first argument is actually a command, like with `git`, the arguments have to be parsed separately for each command. Quick Arg Parser does not facilitate this, but it can be used with it by dealing with the first argument through a usual `if`/`else if` group, then constructing `MainArguments` instantiations with `{argc - 1, argv + 1}`.
+
 ### Automatic help entry
 Calling the program with `--help` or `-?` will print the expected number of arguments and all options, also listing their help entries if set.
 
