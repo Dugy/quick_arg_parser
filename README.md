@@ -1,3 +1,4 @@
+<a href="https://godbolt.org/z/4dc3E8">![Try it online](https://img.shields.io/badge/try%20it-online-blue.svg)</a>
 # Quick Arg Parser
 Tired of unwieldy tools like _getopt_ or _argp_? Quick Arg Parser is a single header C++ library for parsing command line arguments and options with minimal amount of code. All you have to do is to instantiate a class inheriting from the `MainArguments` type and access its members.
 
