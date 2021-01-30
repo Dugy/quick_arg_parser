@@ -2,6 +2,10 @@
 #include <vector>
 #include <sstream>
 #include <memory>
+#include <array>
+#if __cplusplus > 201703L
+#include <optional>
+#endif
 
 namespace QuickArgParserInternals {
 
@@ -89,6 +93,97 @@ struct ArgConverter<std::vector<T>, std::enable_if_t<ArgConverter<T>::canDo>> {
 	constexpr static bool canDo = true;
 };
 
+template <typename T>
+class Optional {
+	alignas(T) std::array<int8_t, sizeof(T)> _contents;
+	bool _exists = false;
+	void clear() {
+		if (_exists)
+			operator*().~T();
+	}
+public:
+	Optional() = default;
+	Optional(std::nullptr_t) {}
+#if __cplusplus > 201703L
+	Optional(std::nullopt_t) {}
+#endif
+	Optional(const Optional& other) {
+		if (_exists)
+			new (operator->()) T(*other);
+	}
+	Optional(Optional&& other) {
+		if (_exists)
+			new (operator->()) T(*other); 
+	}
+	T& operator=(const T& other) {
+		clear();
+		if (_exists) {
+			operator*() = other;
+		} else
+			new (_contents.data()) T(other);
+		_exists = true;
+		return operator*();
+	}
+	T& operator=(T&& other) {
+		clear();
+		if (_exists)
+			operator*() = other;
+		else
+			new (_contents.data()) T(other);
+		_exists = true;
+		return operator*();
+	}
+	void operator=(std::nullptr_t) {
+		clear();
+		_exists = false;
+	}
+#if __cplusplus > 201703L
+	void operator=(std::nullopt_t) {
+		operator=(nullptr);
+	}
+#endif
+	T& operator*() {
+		return *reinterpret_cast<T*>(_contents.data());
+	}
+	const T& operator*() const {
+		return *reinterpret_cast<const T*>(_contents.data());
+	}
+	T* operator->() {
+		return reinterpret_cast<T*>(_contents.data());
+	}
+	const T* operator->() const {
+		return reinterpret_cast<const T*>(_contents.data());
+	}
+	operator bool() const {
+		return _exists;
+	}
+#if __cplusplus > 201703L
+	operator std::optional<T>() {
+		if (_exists)
+			return std::optional<T>(operator*());
+		else
+			return std::nullopt;
+	}
+#endif
+	~Optional() {
+		clear();
+	}
+};
+
+template <typename T>
+struct ArgConverter<Optional<T>, void> {
+	static Optional<T> makeDefault() {
+		return nullptr;
+	}
+	static Optional<T> deserialise(const std::string& from) {
+		Optional<T> made;
+		made = ArgConverter<T>::deserialise(from);
+		return made;
+	}
+	constexpr static bool canDo = true;
+};
+
+
 template <typename T, typename SFINAE = void>
 struct HasHelpProvider : std::false_type {};
 
@@ -161,6 +256,7 @@ class MainArguments {
 	inline static InitialisationStep _initialisationState = UNINITIALISED;
 
 public:
+	template <typename T> using Optional = QuickArgParserInternals::Optional<T>;
 	MainArguments() = default;
 	MainArguments(int argc, char** argv) : _programName(argv[0]), _argv(argv + 1, argv + argc) {
 		using namespace QuickArgParserInternals;
@@ -302,19 +398,24 @@ private:
 			for (int i = 0; i < int(_argv.size()); i++) {
 				if (_argv[i][0] == '-' && _argv[i][1] != '-') {
 					for (int j = 1; _argv[i][j] != '\0'; j++) {
-						if (_argv[i][j] == shortcut)
+						if (_argv[i][j] == shortcut) {
 							return i + 1;
+						}
 					}
+				}
+				if (_argv[i] == "--") {
+					break;
 				}
 			}
 		}
 		
-		// Look for full argument name, nullptr means no full argument name
+		// Look for full argument name, empty means no full argument name
 		if (!argument.empty()) {
 			for (int i = 0; i < int(_argv.size()); i++) {
 				if (_argv[i][0] == '-' && _argv[i][1] == '-') {
-					if (_argv[i] == argument)
+					if (_argv[i] == argument) {
 						return i + 1;
+					}
 				}
 			}
 		}

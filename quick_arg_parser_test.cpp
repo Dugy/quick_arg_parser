@@ -6,6 +6,7 @@ struct Input : MainArguments<Input> {
 	int port = option("port", 'p');
 	int secondaryPort = option("port2", 'P') = 999;
 	int parts = argument(0) = 1;
+	Optional<int> logPort = option("logPort", 'l');
 };
 
 struct Input2 : MainArguments<Input2> {
@@ -15,6 +16,7 @@ struct Input2 : MainArguments<Input2> {
 	std::string file = argument(0);
 	std::string logFile = argument(1) = "log.log";
 	std::string debugLogFile = argument(2) = "debug.log";
+	Optional<std::string> logAddress = option("logAddress", 'l');
 
 	static std::string help(const std::string& programName) {
 		return "Usage\n" + programName + " FILE LOG DEBUGLOG";
@@ -39,7 +41,7 @@ struct Input3 : MainArguments<Input3> {
 
 	void onHelp() {}
 	static std::string options() {
-		return "Don't usese the options, they suck\n";
+		return "Don't use the options, they suck\n";
 	}
 	inline static const std::string version = "1.0";
 	void onVersion() {}
@@ -74,15 +76,17 @@ int main() {
 	verify(t1.port, 666);
 	verify(t1.secondaryPort, 999);
 	verify(t1.parts, 3);
+	verify(bool(t1.logPort), false);
 
 	std::cout << "Second input" << std::endl;
-	Input2 t2 = constructFromString<Input2>("mega_program -p 23,80,442 -u 3 --help --version -- -lame_file_name log");
+	Input2 t2 = constructFromString<Input2>("mega_program -p 23,80,442 -u 3 --help --version --logAddress 127.0.0.1 -- -lame_file_name log");
 	verify(int(t2.ports.size()), 3);
 	verify(t2.file, "-lame_file_name");
 	verify(bool(t2.downloads), false);
 	verify(*t2.uploads, 3);
 	verify(t2.logFile, "log");
 	verify(t2.debugLogFile, "debug.log");
+	verify(*t2.logAddress, "127.0.0.1");
 
 	std::cout << "Third input" << std::endl;
 	Input3 t3 = constructFromString<Input3>("supreme_program file -hH -? -V --LOUD target");

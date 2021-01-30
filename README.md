@@ -30,7 +30,7 @@ A longer example of usage is [here](https://github.com/Dugy/quick_arg_parser/blo
 ## More detailed information
 The library requires C++17. I have tested it on GCC and Clang. It should work on Windows, but the command-line arguments will not be Windows-like.
 
-It can parse integer types, floating point types, `std::string`, `std::vector` of already supported types (assuming comma separated lists), `shared_ptr` and `unique_ptr` to already supported types. Because of a technical limitation, I haven't figured out how to support `std::optional` as well.
+It can parse integer types, floating point types, `std::string`, `std::vector` of already supported types (assuming comma separated lists), `shared_ptr` and `unique_ptr` to already supported types. Because of a technical limitation, a class called `Optional` has to be used instead of `std::optional` (its usage is similar to `std::optional` and can be implicitly converted to it).
 
 Options are declared as follows:
 ```C++
