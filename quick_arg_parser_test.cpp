@@ -1,7 +1,8 @@
-//usr/bin/g++ --std=c++17 -Wall $0 -o ${o=`mktemp`} && exec $o $*
+//usr/bin/g++ --std=c++11 -Wall $0 -o ${o=`mktemp`} && exec $o $*
 #include "quick_arg_parser.hpp"
 
 struct Input : MainArguments<Input> {
+	using MainArguments<Input>::MainArguments;
 	bool verbose = option("verbose", 'V');
 	int port = option("port", 'p');
 	int secondaryPort = option("port2", 'P') = 999;
@@ -10,6 +11,7 @@ struct Input : MainArguments<Input> {
 };
 
 struct Input2 : MainArguments<Input2> {
+	using MainArguments<Input2>::MainArguments;
 	std::vector<int> ports = option("ports", 'p');
 	std::shared_ptr<int> downloads = option("downloads", 'd', "The number of downloads");
 	std::unique_ptr<int> uploads = option("uploads", 'u');
@@ -32,6 +34,7 @@ struct Input2 : MainArguments<Input2> {
 };
 
 struct Input3 : MainArguments<Input3> {
+	using MainArguments<Input3>::MainArguments;
 	std::vector<int> ports = option("ports", 'p');
 	bool enableHorns = option('h');
 	std::string file = argument(0);
@@ -43,9 +46,10 @@ struct Input3 : MainArguments<Input3> {
 	static std::string options() {
 		return "Don't use the options, they suck\n";
 	}
-	inline static const std::string version = "1.0";
+	static std::string version;
 	void onVersion() {}
 };
+std::string Input3::version = "1.0";
 
 template <typename T>
 T constructFromString(std::string args) {
@@ -57,18 +61,20 @@ T constructFromString(std::string args) {
 			args[i] = '\0';
 		}
 	}
-	return T{{int(segments.size()), &segments[0]}};
+	return T{int(segments.size()), &segments[0]};
 }
 
-int main() {
+int errors = 0;
 
-	int errors = 0;
-	auto verify = [&](auto first, auto second) {
-		if (first != second) {
-			std::cout << first << " and " << second << " were supposed to be equal" << std::endl;
-			errors++;
-		}
-	};
+template <typename T1, typename T2>
+void verify(T1 first, T2 second) {
+	if (first != second) {
+		std::cout << first << " and " << second << " were supposed to be equal" << std::endl;
+		errors++;
+	}
+};
+
+int main() {
 
 	std::cout << "First input" << std::endl;
 	Input t1 = constructFromString<Input>("super_program -V --port 666 -- 3");

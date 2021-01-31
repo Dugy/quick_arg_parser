@@ -19,7 +19,7 @@ struct ArgConverter {
 };
 
 template <typename T>
-struct ArgConverter<T, std::enable_if_t<std::is_integral_v<T>>> {
+struct ArgConverter<T, typename std::enable_if<std::is_integral<T>::value>::type> {
 	static T makeDefault() {
 		return 0;
 	}
@@ -30,7 +30,7 @@ struct ArgConverter<T, std::enable_if_t<std::is_integral_v<T>>> {
 };
 
 template <typename T>
-struct ArgConverter<T, std::enable_if_t<std::is_floating_point_v<T>>> {
+struct ArgConverter<T, typename std::enable_if<std::is_floating_point<T>::value>::type> {
 	static T makeDefault() {
 		return 0;
 	}
@@ -68,13 +68,13 @@ struct ArgConverter<std::unique_ptr<T>, void> {
 		return nullptr;
 	}
 	static std::unique_ptr<T> deserialise(const std::string& from) {
-		return std::make_unique<T>(ArgConverter<T>::deserialise(from));
+		return std::unique_ptr<T>(new T(ArgConverter<T>::deserialise(from)));
 	}
 	constexpr static bool canDo = true;
 };
 
 template <typename T>
-struct ArgConverter<std::vector<T>, std::enable_if_t<ArgConverter<T>::canDo>> {
+struct ArgConverter<std::vector<T>, typename std::enable_if<ArgConverter<T>::canDo>::type> {
 	static std::vector<T> makeDefault() {
 		return {};
 	}
@@ -185,53 +185,84 @@ struct ArgConverter<Optional<T>, void> {
 
 
 template <typename T, typename SFINAE = void>
-struct HasHelpProvider : std::false_type {};
+struct HelpProvider{
+	template <typename F>
+	static std::string get(const F& ifAbsent, const std::string& programName) {
+		return ifAbsent(programName);
+	}
+};
 
 template <typename T>
-struct HasHelpProvider<T, std::enable_if_t<
-		!std::is_void_v<decltype(T::help(std::declval<std::string>()))>>>
-		: std::true_type {};
+struct HelpProvider<T, typename std::enable_if<!std::is_void<decltype(T::help(std::declval<std::string>()))>::value>::type> {
+	template <typename F>
+	static std::string get(const F&, const std::string& programName) {
+		return T::help(programName);
+	}
+};
 
 template <typename T, typename SFINAE = void>
-struct HasHelpCallback : std::false_type {};
+struct OnHelpCallback {
+	template <typename F>
+	static void on(T*, const F& ifAbsent) {
+		ifAbsent();
+	}
+};
 
 template <typename T>
-struct HasHelpCallback<T, std::enable_if_t<
-		std::is_void_v<decltype(std::declval<T>().onHelp())>>>
-		: std::true_type {};
+struct OnHelpCallback<T, typename std::enable_if<std::is_void<decltype(std::declval<T>().onHelp())>::value>::type> {
+	template <typename F>
+	static void on(T* instance, const F&) {
+		instance->onHelp();
+	}	
+};
 
 template <typename T, typename SFINAE = void>
 struct HasHelpOptionsProvider : std::false_type {};
 
 template <typename T>
-struct HasHelpOptionsProvider<T, std::enable_if_t<
-		!std::is_void_v<decltype(T::options())>>>
+struct HasHelpOptionsProvider<T, typename std::enable_if<
+		!std::is_void<decltype(T::options())>::value>::type>
 		: std::true_type {};
 
 
 template <typename T, typename SFINAE = void>
-struct HasVersionConstant : std::false_type {};
+struct VersionPrinter {
+	static bool print() {
+		return false;
+	}
+};
 
 template <typename T>
-struct HasVersionConstant<T, std::enable_if_t<
-		!std::is_void_v<decltype(std::string(T::version))>>>
-		: std::true_type {};
+struct VersionPrinter<T, typename std::enable_if<!std::is_void<decltype(std::string(T::version))>::value>::type> {
+	static bool print() {
+		std::cout << T::version << std::endl;
+		return true;
+	}
+};
+
+template <typename T>
+struct VersionPrinter<T, typename std::enable_if<!std::is_void<decltype(std::string(T::version()))>::value>::type> {
+	static bool print() {
+		std::cout << T::version() << std::endl;
+		return true;
+	}
+};
 
 template <typename T, typename SFINAE = void>
-struct HasVersionGetter : std::false_type {};
+struct OnVersionCallback {
+	template <typename F>
+	static void on(T*, const F& ifAbsent) {
+		ifAbsent();
+	}
+};
 
 template <typename T>
-struct HasVersionGetter<T, std::enable_if_t<
-		!std::is_void_v<decltype(std::string(T::version()))>>>
-		: std::true_type {};
-
-template <typename T, typename SFINAE = void>
-struct HasVersionCallback : std::false_type {};
-
-template <typename T>
-struct HasVersionCallback<T, std::enable_if_t<
-		std::is_void_v<decltype(std::declval<T>().onVersion())>>>
-		: std::true_type {};
+struct OnVersionCallback<T, typename std::enable_if<std::is_void<decltype(std::declval<T>().onVersion())>::value>::type> {
+	template <typename F>
+	static void on(T* instance, const F&) {
+		instance->onVersion();
+	}	
+};
 
 
 } // namespace
@@ -240,81 +271,73 @@ template <typename Child>
 class MainArguments {
 	std::string _programName;
 	std::vector<std::string> _argv;
-	inline static std::stringstream _helpPreface;
-	inline static std::stringstream _help;
-
+	
 	constexpr static int NOT_FOUND = -1;
-	inline static std::vector<std::pair<std::string, char>> _nullarySwitches;
-	inline static std::vector<std::pair<std::string, char>> _unarySwitches;
-	inline static int _argumentCountMin = 0;
-	inline static int _argumentCountMax = 0;
 	enum InitialisationStep {
 		UNINITIALISED,
 		INITIALISING,
 		INITIALISED
 	};
-	inline static InitialisationStep _initialisationState = UNINITIALISED;
+	struct Singleton {
+		std::stringstream helpPreface;
+		std::stringstream help;
+		std::vector<std::pair<std::string, char>> nullarySwitches;
+		std::vector<std::pair<std::string, char>> unarySwitches;
+		int argumentCountMin = 0;
+		int argumentCountMax = 0;
+		InitialisationStep initialisationState = UNINITIALISED;
+	};
+	static Singleton& singleton() {
+		static Singleton instance;
+		return instance;
+	}
 
 public:
 	template <typename T> using Optional = QuickArgParserInternals::Optional<T>;
 	MainArguments() = default;
 	MainArguments(int argc, char** argv) : _programName(argv[0]), _argv(argv + 1, argv + argc) {
 		using namespace QuickArgParserInternals;
-		if (_initialisationState == UNINITIALISED) {
+		if (singleton().initialisationState == UNINITIALISED) {
 			// When first created, create temporarily another instance to explore what are the members
-			_initialisationState = INITIALISING;
+			singleton().initialisationState = INITIALISING;
 
 			Child investigator;
 			// This will fill the static variables
-			if constexpr(QuickArgParserInternals::HasHelpProvider<Child>::value) {
-				_helpPreface << Child::help(_programName);
-			} else {
-				_helpPreface << _programName << " takes between " << _argumentCountMin << " and " << _argumentCountMax <<
-						" arguments, plus these options:";
-			}
-			if constexpr(QuickArgParserInternals::HasHelpOptionsProvider<Child>::value) {
-				_help << Child::options();
-			}
+			singleton().helpPreface << QuickArgParserInternals::HelpProvider<Child>::get([] (const std::string& programName) {
+				return programName + " takes between " + std::to_string(singleton().argumentCountMin) + " and " +
+						std::to_string(singleton().argumentCountMax) + " arguments, plus these options:";
+			}, _programName);
 
-			investigator._initialisationState = INITIALISED;
+			singleton().initialisationState = INITIALISED;
 		}
-		if (_initialisationState == INITIALISED) {
+		if (singleton().initialisationState == INITIALISED) {
 			bool switchesEnabled = true;
-			auto isListedAs = [] (const auto& arg, const std::vector<std::pair<std::string, char>>& switches) {
+			auto isListedAsChar = [] (const char arg, const std::vector<std::pair<std::string, char>>& switches) {
 				for (const auto& it : switches) {
-					if constexpr(std::is_same_v<std::remove_const_t<std::decay_t<decltype(arg)>>, char>) {
-						if (it.second == arg)
-							return true;
-					} else {
-						if (it.first == arg)
-							return true;
-					}
+					if (it.second == arg)
+						return true;
+				}
+				return false;
+			};
+			auto isListedAsString = [] (const std::string& arg, const std::vector<std::pair<std::string, char>>& switches) {
+				for (const auto& it : switches) {
+					if (it.first == arg)
+						return true;
 				}
 				return false;
 			};
 			auto printHelp = [this] () {
-				std::cout << _helpPreface.str() << std::endl;
-				std::cout << _help.str() << std::endl;
-				if constexpr(QuickArgParserInternals::HasHelpCallback<Child>::value) {
-					static_cast<Child*>(this)->onHelp();
-				} else {
-					std::exit(0);
-				}
+				std::cout << singleton().helpPreface.str() << std::endl;
+				std::cout << singleton().help.str() << std::endl;
+				
+				QuickArgParserInternals::OnHelpCallback<Child>::on(static_cast<Child*>(this), [] { std::exit(0); });
 			};
 			auto printVersion = [this] () {
-				if constexpr(QuickArgParserInternals::HasVersionConstant<Child>::value) {
-					std::cout << Child::version << std::endl;
-				} else if constexpr(QuickArgParserInternals::HasVersionGetter<Child>::value) {
-					std::cout << Child::version() << std::endl;
-				} else return false; // Returns false if the version is not known, leading to no action if found
-				
-				if constexpr(QuickArgParserInternals::HasVersionCallback<Child>::value) {
-					static_cast<Child*>(this)->onVersion();
-					return true;
-				} else {
-					std::exit(0);
-					return true;
-				}
+				if (!QuickArgParserInternals::VersionPrinter<Child>::print())
+					return false; // Returns false if the version is not known, leading to no action if found
+					
+				QuickArgParserInternals::OnVersionCallback<Child>::on(static_cast<Child*>(this), [] { std::exit(0); });
+				return true;
 			};
 
 			// Collect program arguments (as opposed to switches) and validate everything
@@ -335,10 +358,10 @@ public:
 							switchesEnabled = false;
 							continue; // the -- marks an end of switches
 						}
-						if (isListedAs(_argv[i], _unarySwitches)) {
+						if (isListedAsString(_argv[i], singleton().unarySwitches)) {
 							i++; // The next argument is part of the switch
 							continue;
-						} else if (!isListedAs(_argv[i], _nullarySwitches)) {
+						} else if (!isListedAsString(_argv[i], singleton().nullarySwitches)) {
 							throw ArgumentError("Unknown switch " + _argv[i]);
 						}
 					} else {
@@ -354,18 +377,18 @@ public:
 									continue;
 							}
 							
-							if (isListedAs(_argv[i][1], _unarySwitches)) {
+							if (isListedAsChar(_argv[i][1], singleton().unarySwitches)) {
 								i++; // The next argument is part of the switch
 								continue;
-							} else if (!isListedAs(_argv[i][1], _nullarySwitches)) {
+							} else if (!isListedAsChar(_argv[i][1], singleton().nullarySwitches)) {
 								throw ArgumentError(std::string("Unknown switch ") + _argv[i][1]);
 							}
 							// Otherwise it's a bool switch that can be ignored
 						} else {
 							// Some validations that all massed single letter switches don't have arguments
 							for (int j = 1; j < int(_argv[i].size()); j++) {
-								if (!isListedAs(_argv[i][j], _nullarySwitches)) {
-									if (isListedAs(_argv[i][j], _unarySwitches))
+								if (!isListedAsChar(_argv[i][j], singleton().nullarySwitches)) {
+									if (isListedAsChar(_argv[i][j], singleton().unarySwitches))
 										throw ArgumentError("Switch group " + _argv[i]
 												+ " contains a switch that needs an argument");
 									else
@@ -380,11 +403,11 @@ public:
 				}
 			}
 
-			if (int(arguments.size()) < _argumentCountMin)
-				throw ArgumentError("Expected at least " + std::to_string(_argumentCountMin)
+			if (int(arguments.size()) < singleton().argumentCountMin)
+				throw ArgumentError("Expected at least " + std::to_string(singleton().argumentCountMin)
 						+ " arguments, got " + std::to_string(arguments.size()));
-			if (int(arguments.size()) > _argumentCountMax)
-				throw ArgumentError("Expected at most " + std::to_string(_argumentCountMax)
+			if (int(arguments.size()) > singleton().argumentCountMax)
+				throw ArgumentError("Expected at most " + std::to_string(singleton().argumentCountMax)
 						+ " arguments, got " + std::to_string(arguments.size()));
 		}
 	}
@@ -434,20 +457,20 @@ protected:
 				: name(name), parent(parent), shortcut(shortcut), help(help) {}
 
 		void addHelpEntry() const {
-			if constexpr(QuickArgParserInternals::HasHelpOptionsProvider<Child>::value)
+			if (QuickArgParserInternals::HasHelpOptionsProvider<Child>::value)
 				return;
 
 			if (shortcut != '\0')
-				parent->_help << '-' << shortcut;
-			parent->_help << '\t';
+				parent->singleton().help << '-' << shortcut;
+			parent->singleton().help << '\t';
 			if (!name.empty())
-				parent->_help << name;
-			parent->_help << "\t " << help << std::endl;
+				parent->singleton().help << name;
+			parent->singleton().help << "\t " << help << std::endl;
 		}
 	public:
 		operator bool() const {
-			if (parent->_initialisationState == INITIALISING) {
-				parent->_nullarySwitches.push_back(std::make_pair(name, shortcut));
+			if (parent->singleton().initialisationState == INITIALISING) {
+				parent->singleton().nullarySwitches.push_back(std::make_pair(name, shortcut));
 				addHelpEntry();
 				return false;
 			}
@@ -456,8 +479,8 @@ protected:
 
 		template <typename T>
 		T getOption(T defaultValue) const {
-			if (parent->_initialisationState == INITIALISING) {
-				parent->_unarySwitches.push_back(std::make_pair(name, shortcut));
+			if (parent->singleton().initialisationState == INITIALISING) {
+				parent->singleton().unarySwitches.push_back(std::make_pair(name, shortcut));
 				addHelpEntry();
 				return defaultValue;
 			}
@@ -476,7 +499,7 @@ protected:
 		GrabberDefaulted(const MainArguments* parent, const std::string& name, char shortcut,
 				const std::string& help, Default defaultValue)
 				: GrabberBase(parent, name, shortcut, help), defaultValue(defaultValue) {}
-		template <typename T, std::enable_if_t<QuickArgParserInternals::ArgConverter<T>::canDo && !std::is_same_v<T, bool>>* = nullptr>
+		template <typename T, typename std::enable_if<QuickArgParserInternals::ArgConverter<T>::canDo && !std::is_same<T, bool>::value>::type* = nullptr>
 		operator T() const {
 			return GrabberBase::getOption(defaultValue);
 		}
@@ -487,12 +510,12 @@ protected:
 	public:
 		using GrabberBase::GrabberBase;
 		template <typename Default>
-		auto operator=(Default defaultValue) {
+		GrabberDefaulted<Default> operator=(Default defaultValue) {
 			return GrabberDefaulted<Default>(GrabberBase::parent, GrabberBase::name,
 					GrabberBase::shortcut, GrabberBase::help, defaultValue);
 		}
 		
-		template <typename T, std::enable_if_t<QuickArgParserInternals::ArgConverter<T>::canDo>* = nullptr>
+		template <typename T, typename std::enable_if<QuickArgParserInternals::ArgConverter<T>::canDo>::type* = nullptr>
 		operator T() const {
 			return GrabberBase::getOption(QuickArgParserInternals::ArgConverter<T>::makeDefault());
 		}
@@ -520,11 +543,11 @@ protected:
 		ArgGrabberDefaulted(const MainArguments* parent, int index, Default defaultValue) :
 				ArgGrabberBase(parent, index), defaultValue(defaultValue) {}
 
-		template <typename T, std::enable_if_t<QuickArgParserInternals::ArgConverter<T>::canDo>* = nullptr>
+		template <typename T, typename std::enable_if<QuickArgParserInternals::ArgConverter<T>::canDo>::type* = nullptr>
 		operator T() const {
-			if (ArgGrabberBase::parent->_initialisationState == INITIALISING) {
-				ArgGrabberBase::parent->_argumentCountMax =
-						std::max(ArgGrabberBase::parent->_argumentCountMax, ArgGrabberBase::index + 1);
+			if (ArgGrabberBase::parent->singleton().initialisationState == INITIALISING) {
+				ArgGrabberBase::parent->singleton().argumentCountMax =
+						std::max(ArgGrabberBase::parent->singleton().argumentCountMax, ArgGrabberBase::index + 1);
 				return QuickArgParserInternals::ArgConverter<T>::makeDefault();
 			}
 			if (ArgGrabberBase::index >= int(ArgGrabberBase::parent->arguments.size()))
@@ -537,16 +560,16 @@ protected:
 	struct ArgGrabber : public ArgGrabberBase {
 		using ArgGrabberBase::ArgGrabberBase;
 		template <typename Default>
-		auto operator=(Default defaultValue) const {
+		ArgGrabberDefaulted<Default> operator=(Default defaultValue) const {
 			return ArgGrabberDefaulted<Default>(ArgGrabberBase::parent, ArgGrabberBase::index, defaultValue);
 		}
-		template <typename T, std::enable_if_t<QuickArgParserInternals::ArgConverter<T>::canDo>* = nullptr>
+		template <typename T, typename std::enable_if<QuickArgParserInternals::ArgConverter<T>::canDo>::type* = nullptr>
 		operator T() const {
-			if (ArgGrabberBase::parent->_initialisationState == INITIALISING) {
-				ArgGrabberBase::parent->_argumentCountMin =
-						std::max(ArgGrabberBase::parent->_argumentCountMin, ArgGrabberBase::index + 1);
-				ArgGrabberBase::parent->_argumentCountMax =
-						std::max(ArgGrabberBase::parent->_argumentCountMax, ArgGrabberBase::index + 1);
+			if (ArgGrabberBase::parent->singleton().initialisationState == INITIALISING) {
+				ArgGrabberBase::parent->singleton().argumentCountMin =
+						std::max(ArgGrabberBase::parent->singleton().argumentCountMin, ArgGrabberBase::index + 1);
+				ArgGrabberBase::parent->singleton().argumentCountMax =
+						std::max(ArgGrabberBase::parent->singleton().argumentCountMax, ArgGrabberBase::index + 1);
 				return QuickArgParserInternals::ArgConverter<T>::makeDefault();
 			}
 			return QuickArgParserInternals::ArgConverter<T>::deserialise(ArgGrabberBase::parent->arguments[ArgGrabberBase::index]);
