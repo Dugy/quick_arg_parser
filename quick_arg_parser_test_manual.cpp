@@ -8,8 +8,8 @@ struct Input : MainArguments<Input> {
 	float timeout = option("timeout", 't', "Timeout in seconds");
 	Optional<std::string> debugLog = option("debug_log", 'd');
 	
-	std::string file = argument(0);
-	std::string secondaryFile = argument(1) = "aux.out";
+	std::filesystem::path file = argument(0);
+	std::filesystem::path secondaryFile = argument(1) = "aux.out";
 	
 	inline static std::string version = "1.0";
 	static std::string help(const std::string& programName) {
@@ -25,8 +25,9 @@ int main(int argc, char** argv) {
 	std::cout << "Shorten: " << in.shorten << std::endl;
 	std::cout << "Port: " << in.port << std::endl;
 	std::cout << "Timeout: " << in.timeout << std::endl;
-	if (in.debugLog)
-		std::cout << "DebugLog " << *in.debugLog << std::endl;
+	std::optional<std::string> debugLog = in.debugLog;
+	if (debugLog)
+		std::cout << "DebugLog " << *debugLog << std::endl;
 	std::cout << "File: " << in.file << std::endl;
 	std::cout << "Secondary file: " << in.secondaryFile << std::endl;
 }

@@ -28,9 +28,9 @@ And it can deal with the following call:
 A longer example of usage is [here](https://github.com/Dugy/quick_arg_parser/blob/main/quick_arg_parser_test_manual.cpp).
 
 ## More detailed information
-The library requires C++17. I have tested it on GCC and Clang. It should work on Windows, but the command-line arguments will not be Windows-like.
+The library requires C++11. I have tested it on GCC and Clang. It should work on Windows, but the command-line arguments will not be Windows-like.
 
-It can parse integer types, floating point types, `std::string`, `std::vector` of already supported types (assuming comma separated lists), `shared_ptr` and `unique_ptr` to already supported types. Because of a technical limitation, a class called `Optional` has to be used instead of `std::optional` (its usage is similar to `std::optional` and can be implicitly converted to it).
+It can parse integer types, floating point types, `std::string`, `std::vector` of already supported types (assuming comma separated lists), `shared_ptr` and `unique_ptr` to already supported types. A class called `Optional` has to be used instead of `std::optional` (its usage is similar to `std::optional` and can be implicitly converted to it). If the option is missing, it will be empty, it won't compile with default arguments (except `nullptr` and `std::nullopt`).
 
 Options are declared as follows:
 ```C++
@@ -67,5 +67,10 @@ By default, the program exits after printing help. This behaviour can be changed
 ## Automatic version entry
 If the class has an `inline static` string member called `version` or a method with signature `static std::string version()`, it will react to options `--version` or `-V` by printing the string and exiting. The automatic exit can be overriden by defining a `void onVersion()` method, which will be called instead.
 
+## C++17
+If C++17 is available, then the `Optional` type can be converted into `std::optional`. Because of a technical limitation, `std::optional` cannot be used as an argument type. Also, arguments can be deserialised into `std::filesystem::path`.
+
 ## Gotchas
 This isn't exactly the way C++ was expected to be used, so there might be a few traps for those who use it differently than intended. The class inheriting from `MainArguments` can have other members, but its constructor can be dangerous. Using the constructor to initialise members set through `option` or `argument` will cause the assignment to override the parsing behaviour for those members. The constructor also should not have side effects, because it will be called more than once, not always with the parsed values. Neither of this matters if you use it as showcased.
+
+Because of consistency, using `Optional` as an argument type does not make that argument optional, you need to set `nullptr` or `std::nullopt` (C++17) as default argument to make it optional.

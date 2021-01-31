@@ -3,7 +3,9 @@
 #include <sstream>
 #include <memory>
 #include <array>
-#if __cplusplus > 201703L
+
+#if __cplusplus > 201402L
+#include <filesystem>
 #include <optional>
 #endif
 
@@ -104,7 +106,7 @@ class Optional {
 public:
 	Optional() = default;
 	Optional(std::nullptr_t) {}
-#if __cplusplus > 201703L
+#if __cplusplus > 201402L
 	Optional(std::nullopt_t) {}
 #endif
 	Optional(const Optional& other) {
@@ -137,7 +139,7 @@ public:
 		clear();
 		_exists = false;
 	}
-#if __cplusplus > 201703L
+#if __cplusplus > 201402L
 	void operator=(std::nullopt_t) {
 		operator=(nullptr);
 	}
@@ -157,7 +159,7 @@ public:
 	operator bool() const {
 		return _exists;
 	}
-#if __cplusplus > 201703L
+#if __cplusplus > 201402L
 	operator std::optional<T>() {
 		if (_exists)
 			return std::optional<T>(operator*());
@@ -182,6 +184,20 @@ struct ArgConverter<Optional<T>, void> {
 	}
 	constexpr static bool canDo = true;
 };
+
+#if __cplusplus > 201402L
+template <>
+struct ArgConverter<std::filesystem::path, void> {
+	static std::filesystem::path makeDefault() {
+		return {};
+	}
+	static std::filesystem::path deserialise(const std::string& from) {
+		std::cout << "Reading path " << std::endl;
+		return std::filesystem::path(from);
+	}
+	constexpr static bool canDo = true;
+};
+#endif
 
 
 template <typename T, typename SFINAE = void>
@@ -499,8 +515,9 @@ protected:
 		GrabberDefaulted(const MainArguments* parent, const std::string& name, char shortcut,
 				const std::string& help, Default defaultValue)
 				: GrabberBase(parent, name, shortcut, help), defaultValue(defaultValue) {}
-		template <typename T, typename std::enable_if<QuickArgParserInternals::ArgConverter<T>::canDo && !std::is_same<T, bool>::value>::type* = nullptr>
+		template <typename T, typename std::enable_if<!std::is_same<T, bool>::value>::type* = nullptr>
 		operator T() const {
+			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
 			return GrabberBase::getOption(defaultValue);
 		}
 	};
@@ -515,8 +532,9 @@ protected:
 					GrabberBase::shortcut, GrabberBase::help, defaultValue);
 		}
 		
-		template <typename T, typename std::enable_if<QuickArgParserInternals::ArgConverter<T>::canDo>::type* = nullptr>
+		template <typename T>
 		operator T() const {
+			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
 			return GrabberBase::getOption(QuickArgParserInternals::ArgConverter<T>::makeDefault());
 		}
 	};
@@ -543,8 +561,9 @@ protected:
 		ArgGrabberDefaulted(const MainArguments* parent, int index, Default defaultValue) :
 				ArgGrabberBase(parent, index), defaultValue(defaultValue) {}
 
-		template <typename T, typename std::enable_if<QuickArgParserInternals::ArgConverter<T>::canDo>::type* = nullptr>
+		template <typename T>
 		operator T() const {
+			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
 			if (ArgGrabberBase::parent->singleton().initialisationState == INITIALISING) {
 				ArgGrabberBase::parent->singleton().argumentCountMax =
 						std::max(ArgGrabberBase::parent->singleton().argumentCountMax, ArgGrabberBase::index + 1);
@@ -563,8 +582,9 @@ protected:
 		ArgGrabberDefaulted<Default> operator=(Default defaultValue) const {
 			return ArgGrabberDefaulted<Default>(ArgGrabberBase::parent, ArgGrabberBase::index, defaultValue);
 		}
-		template <typename T, typename std::enable_if<QuickArgParserInternals::ArgConverter<T>::canDo>::type* = nullptr>
+		template <typename T>
 		operator T() const {
+			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
 			if (ArgGrabberBase::parent->singleton().initialisationState == INITIALISING) {
 				ArgGrabberBase::parent->singleton().argumentCountMin =
 						std::max(ArgGrabberBase::parent->singleton().argumentCountMin, ArgGrabberBase::index + 1);
