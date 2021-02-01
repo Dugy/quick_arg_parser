@@ -70,6 +70,30 @@ If the class has an `inline static` string member called `version` or a method w
 ## C++17
 If C++17 is available, then the `Optional` type can be converted into `std::optional`. Because of a technical limitation, `std::optional` cannot be used as an argument type. Also, arguments can be deserialised into `std::filesystem::path`.
 
+## Legacy options
+Sometimes, it's necessary to support options like `-something` or `/something`. This can be done using:
+```C++
+	int speed = nonstandardOption("-efficiency", 'e');
+```
+If this is done, the long option will not be expected to be exactly as listed in the first argument, not preceded by a double dash. If it starts with a single dash, it will not be considered an aggregate of short options.
+
+## Custom types
+To support your custom class (called `MyType` here), define this somewhere before the definition of the parsing class:
+```C++
+namespace QuickArgParserInternals {
+template <>
+struct ArgConverter<MyType, void> {
+	static MyType makeDefault() {
+		return {}; // Do something else if it doesn't have a default constructor
+	}
+	static MyType deserialise(const std::string& from) {
+		return MyType::fromString(from); // assuming this is how it's deserialised
+	}
+	constexpr static bool canDo = true;
+};
+} // namespace
+```
+
 ## Gotchas
 This isn't exactly the way C++ was expected to be used, so there might be a few traps for those who use it differently than intended. The class inheriting from `MainArguments` can have other members, but its constructor can be dangerous. Using the constructor to initialise members set through `option` or `argument` will cause the assignment to override the parsing behaviour for those members. The constructor also should not have side effects, because it will be called more than once, not always with the parsed values. Neither of this matters if you use it as showcased.
 

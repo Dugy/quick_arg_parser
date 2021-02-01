@@ -192,7 +192,6 @@ struct ArgConverter<std::filesystem::path, void> {
 		return {};
 	}
 	static std::filesystem::path deserialise(const std::string& from) {
-		std::cout << "Reading path " << std::endl;
 		return std::filesystem::path(from);
 	}
 	constexpr static bool canDo = true;
@@ -299,6 +298,7 @@ class MainArguments {
 		std::stringstream help;
 		std::vector<std::pair<std::string, char>> nullarySwitches;
 		std::vector<std::pair<std::string, char>> unarySwitches;
+		std::vector<std::string> confusingSwitches; // nonstandard switches starting with a single dash
 		int argumentCountMin = 0;
 		int argumentCountMax = 0;
 		InitialisationStep initialisationState = UNINITIALISED;
@@ -358,7 +358,7 @@ public:
 
 			// Collect program arguments (as opposed to switches) and validate everything
 			for (int i = 0; i < int(_argv.size()); i++) {
-				if (switchesEnabled && _argv[i][0] == '-') {
+				if (switchesEnabled) {
 					if (_argv[i] == "--help") {
 						printHelp();
 						continue;
@@ -367,20 +367,22 @@ public:
 						if (printVersion())
 							continue;
 					}
+					if (_argv[i] == "--") {
+						switchesEnabled = false;
+						continue;
+					}
+					if (isListedAsString(_argv[i], singleton().unarySwitches)) {
+						i++; // The next argument is part of the switch
+						continue;
+					} else if (isListedAsString(_argv[i], singleton().nullarySwitches)) {
+						continue;
+					}
 					
-					if (_argv[i][1] == '-') {
-						// Starts with --
-						if (_argv[i].size() == 2) {
-							switchesEnabled = false;
-							continue; // the -- marks an end of switches
-						}
-						if (isListedAsString(_argv[i], singleton().unarySwitches)) {
-							i++; // The next argument is part of the switch
-							continue;
-						} else if (!isListedAsString(_argv[i], singleton().nullarySwitches)) {
+					
+					if (_argv[i][0] == '-') {
+						if (_argv[i][1] == '-')
 							throw ArgumentError("Unknown switch " + _argv[i]);
-						}
-					} else {
+						
 						// Starts with -
 						if (_argv[i].size() == 2) {
 							// Is an argument of type -x
@@ -399,7 +401,7 @@ public:
 							} else if (!isListedAsChar(_argv[i][1], singleton().nullarySwitches)) {
 								throw ArgumentError(std::string("Unknown switch ") + _argv[i][1]);
 							}
-							// Otherwise it's a bool switch that can be ignored
+							continue; // Otherwise it's a bool switch that can be ignored
 						} else {
 							// Some validations that all massed single letter switches don't have arguments
 							for (int j = 1; j < int(_argv[i].size()); j++) {
@@ -411,12 +413,13 @@ public:
 										throw ArgumentError(std::string("Unknown switch ") + _argv[i][j]);
 								}
 							}
+							continue;
 						}
 					}
-				} else {
-					// Is not a switch
-					arguments.push_back(_argv[i]);
 				}
+				
+				// Is not a switch, continue was not used
+				arguments.push_back(_argv[i]);
 			}
 
 			if (int(arguments.size()) < singleton().argumentCountMin)
@@ -435,6 +438,11 @@ private:
 		// Look for shortcut, end of string means no shortcut
 		if (shortcut != '\0') {
 			for (int i = 0; i < int(_argv.size()); i++) {
+				// Skip this if it is a strange switch starting with a single dash
+				for (const auto& it : singleton().confusingSwitches)
+					if (_argv[i] == it)
+						goto skipThisOne;
+				
 				if (_argv[i][0] == '-' && _argv[i][1] != '-') {
 					for (int j = 1; _argv[i][j] != '\0'; j++) {
 						if (_argv[i][j] == shortcut) {
@@ -445,16 +453,16 @@ private:
 				if (_argv[i] == "--") {
 					break;
 				}
+				
+				skipThisOne:;
 			}
 		}
 		
 		// Look for full argument name, empty means no full argument name
 		if (!argument.empty()) {
 			for (int i = 0; i < int(_argv.size()); i++) {
-				if (_argv[i][0] == '-' && _argv[i][1] == '-') {
-					if (_argv[i] == argument) {
-						return i + 1;
-					}
+				if (_argv[i] == argument) {
+					return i + 1;
 				}
 			}
 		}
@@ -518,7 +526,7 @@ protected:
 		template <typename T, typename std::enable_if<!std::is_same<T, bool>::value>::type* = nullptr>
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
-			return GrabberBase::getOption(defaultValue);
+			return GrabberBase::template getOption<T>(defaultValue);
 		}
 	};
 	
@@ -535,7 +543,7 @@ protected:
 		template <typename T>
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
-			return GrabberBase::getOption(QuickArgParserInternals::ArgConverter<T>::makeDefault());
+			return GrabberBase::template getOption<T>(QuickArgParserInternals::ArgConverter<T>::makeDefault());
 		}
 	};
 
@@ -544,6 +552,12 @@ protected:
 	}
 	Grabber option(char shortcut = '\0', const std::string& help = "") {
 		return Grabber(this, "", shortcut, help);
+	}
+	Grabber nonstandardOption(const std::string& name, char shortcut = '\0', const std::string& help = "") {
+		if (singleton().initialisationState == INITIALISING&& name[0] == '-' && name[1] != '-')
+			singleton().confusingSwitches.push_back(name);
+			
+		return Grabber(this, name, shortcut, help);
 	}
 
 	class ArgGrabberBase {
