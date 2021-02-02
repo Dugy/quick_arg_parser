@@ -28,7 +28,7 @@ And it can deal with the following call:
 A longer example of usage is [here](https://github.com/Dugy/quick_arg_parser/blob/main/quick_arg_parser_test_manual.cpp).
 
 ## More detailed information
-The library requires C++11. I have tested it on GCC and Clang. It should work on Windows, but the command-line arguments will not be Windows-like.
+The library requires C++11. I have tested it on GCC and Clang. It should work on Windows, but the command-line arguments will not be Windows-like. C++11 does not allow aggregate-initialising parent classes, so the child class of `MainArguments` will have to inherit its constructor `using MainArguments<Args>::MainArguments`, allowing to create it with single braces.
 
 It can parse integer types, floating point types, `std::string`, `std::vector` of already supported types (assuming comma separated lists), `shared_ptr` and `unique_ptr` to already supported types. A class called `Optional` has to be used instead of `std::optional` (its usage is similar to `std::optional` and can be implicitly converted to it). If the option is missing, it will be empty, it won't compile with default arguments (except `nullptr` and `std::nullopt`).
 
@@ -66,6 +66,13 @@ By default, the program exits after printing help. This behaviour can be changed
 
 ## Automatic version entry
 If the class has an `inline static` string member called `version` or a method with signature `static std::string version()`, it will react to options `--version` or `-V` by printing the string and exiting. The automatic exit can be overriden by defining a `void onVersion()` method, which will be called instead.
+
+## Validation
+You can add a lambda (or a class with overloaded function call operator) that takes the value and returns either a bool indicating if the value is valid or throws an exception if the value is invalid.
+
+```C++
+	int port = option("port", 'p').validator([] (int port) { return port > 1023; });
+```
 
 ## C++17
 If C++17 is available, then the `Optional` type can be converted into `std::optional`. Because of a technical limitation, `std::optional` cannot be used as an argument type. Also, arguments can be deserialised into `std::filesystem::path`.

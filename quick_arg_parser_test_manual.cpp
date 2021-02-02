@@ -4,12 +4,13 @@
 struct Input : MainArguments<Input> {
 	bool verbose = option("verbose", 'v');
 	bool shorten = option("shorten", 's');
-	int port = option("port", 'p');
+	int port = option("port", 'p').validator([] (int port) { return port > 1023; });
 	float timeout = option("timeout", 't', "Timeout in seconds");
 	Optional<std::string> debugLog = option("debug_log", 'd');
 	
 	std::filesystem::path file = argument(0);
 	std::filesystem::path secondaryFile = argument(1) = "aux.out";
+	int rotation = argument(2).validator([] (int rotation) { return rotation > 0; }) = 2;
 	
 	inline static std::string version = "1.0";
 	static std::string help(const std::string& programName) {
@@ -30,4 +31,5 @@ int main(int argc, char** argv) {
 		std::cout << "DebugLog " << *debugLog << std::endl;
 	std::cout << "File: " << in.file << std::endl;
 	std::cout << "Secondary file: " << in.secondaryFile << std::endl;
+	std::cout << "Rotation: " << in.rotation << std::endl;
 }

@@ -109,11 +109,11 @@ public:
 #if __cplusplus > 201402L
 	Optional(std::nullopt_t) {}
 #endif
-	Optional(const Optional& other) {
+	Optional(const Optional& other) : _exists(other._exists) {
 		if (_exists)
 			new (operator->()) T(*other);
 	}
-	Optional(Optional&& other) {
+	Optional(Optional&& other) : _exists(other._exists) {
 		if (_exists)
 			new (operator->()) T(*other); 
 	}
@@ -279,6 +279,28 @@ struct OnVersionCallback<T, typename std::enable_if<std::is_void<decltype(std::d
 	}	
 };
 
+struct DummyValidator{};
+
+template <typename Validator, typename SFINAE = void>
+struct ValidatorUser {
+	template <typename Value>
+	static bool useValidator(const Validator& validator, const Value& value) {
+		return true;
+	}
+};
+
+template <typename Validator>
+struct ValidatorUser<Validator, typename std::enable_if<!std::is_same<Validator, DummyValidator>::value>::type> {
+	template <typename Value, typename std::enable_if<std::is_same<bool, decltype(std::declval<Validator>()(std::declval<Value>()))>::value>::type* = nullptr>
+	static bool useValidator(const Validator& validator, const Value& value) {
+		return validator(value);
+	}
+	template <typename Value, typename std::enable_if<!std::is_same<bool, decltype(std::declval<Validator>()(std::declval<Value>()))>::value>::type* = nullptr>
+	static bool useValidator(const Validator& validator, const Value& value) {
+		validator(value);
+		return true;
+	}
+};
 
 } // namespace
 
@@ -307,7 +329,6 @@ class MainArguments {
 		static Singleton instance;
 		return instance;
 	}
-
 public:
 	template <typename T> using Optional = QuickArgParserInternals::Optional<T>;
 	MainArguments() = default;
@@ -470,15 +491,17 @@ private:
 		return NOT_FOUND;
 	}
 	
-protected:
+protected:	
+	template <typename Validator>
 	class GrabberBase {
 	protected:
 		const std::string name;
 		const MainArguments* parent;
 		const char shortcut;
 		const std::string help;
-		GrabberBase(const MainArguments* parent, const std::string& name, char shortcut, const std::string& help)
-				: name(name), parent(parent), shortcut(shortcut), help(help) {}
+		Validator validator;
+		GrabberBase(const MainArguments* parent, const std::string& name, char shortcut, const std::string& help, const Validator& validator)
+				: name(name), parent(parent), shortcut(shortcut), help(help), validator(validator) {}
 
 		void addHelpEntry() const {
 			if (QuickArgParserInternals::HasHelpOptionsProvider<Child>::value)
@@ -508,109 +531,148 @@ protected:
 				addHelpEntry();
 				return defaultValue;
 			}
+			
+			auto validate = [&] (const T& value) {
+				if (!QuickArgParserInternals::ValidatorUser<Validator>::useValidator(validator, value)) {
+					throw QuickArgParserInternals::ArgumentError("Invalid value of argument " + name);
+				}
+			};
 			int position = parent->findArgument(name, shortcut);
+			
 			if (position != NOT_FOUND) {
-				return QuickArgParserInternals::ArgConverter<T>::deserialise(parent->_argv[position]);
+				auto obtained = QuickArgParserInternals::ArgConverter<T>::deserialise(parent->_argv[position]);
+				validate(obtained);
+				return obtained;
 			}
+			validate(defaultValue);
 			return defaultValue;
 		}
 	};
 
-	template <typename Default>
-	class GrabberDefaulted : public GrabberBase {
+	template <typename Default, typename Validator>
+	class GrabberDefaulted : public GrabberBase<Validator> {
 		Default defaultValue;
 	public:
 		GrabberDefaulted(const MainArguments* parent, const std::string& name, char shortcut,
-				const std::string& help, Default defaultValue)
-				: GrabberBase(parent, name, shortcut, help), defaultValue(defaultValue) {}
+				const std::string& help, Validator validator, Default defaultValue)
+				: GrabberBase<Validator>(parent, name, shortcut, help, validator), defaultValue(defaultValue) {}
 		template <typename T, typename std::enable_if<!std::is_same<T, bool>::value>::type* = nullptr>
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
-			return GrabberBase::template getOption<T>(defaultValue);
+			return GrabberBase<Validator>::template getOption<T>(defaultValue);
 		}
 	};
 	
-	class Grabber : public GrabberBase {
+	template <typename Validator>
+	class Grabber : public GrabberBase<Validator> {
 		friend class MainArguments;
 	public:
-		using GrabberBase::GrabberBase;
+		using GrabberBase<Validator>::GrabberBase;
 		template <typename Default>
-		GrabberDefaulted<Default> operator=(Default defaultValue) {
-			return GrabberDefaulted<Default>(GrabberBase::parent, GrabberBase::name,
-					GrabberBase::shortcut, GrabberBase::help, defaultValue);
+		GrabberDefaulted<Default, Validator> operator=(Default defaultValue) {
+			return {GrabberBase<Validator>::parent, GrabberBase<Validator>::name, GrabberBase<Validator>::shortcut,
+					GrabberBase<Validator>::help, GrabberBase<Validator>::validator, defaultValue};
 		}
 		
 		template <typename T>
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
-			return GrabberBase::template getOption<T>(QuickArgParserInternals::ArgConverter<T>::makeDefault());
+			return GrabberBase<Validator>::template getOption<T>(QuickArgParserInternals::ArgConverter<T>::makeDefault());
+		}
+		
+		template <typename NewValidator>
+		Grabber<NewValidator> validator(const NewValidator& newValidator) {
+			return {GrabberBase<Validator>::parent, GrabberBase<Validator>::name, GrabberBase<Validator>::shortcut,
+					GrabberBase<Validator>::help, newValidator};
 		}
 	};
 
-	Grabber option(const std::string& name, char shortcut = '\0', const std::string& help = "") {
-		return Grabber(this, "--" + name, shortcut, help);
+	Grabber<QuickArgParserInternals::DummyValidator> option(const std::string& name, char shortcut = '\0', const std::string& help = "") {
+		return Grabber<QuickArgParserInternals::DummyValidator>(this, "--" + name, shortcut, help, QuickArgParserInternals::DummyValidator{});
 	}
-	Grabber option(char shortcut = '\0', const std::string& help = "") {
-		return Grabber(this, "", shortcut, help);
+	Grabber<QuickArgParserInternals::DummyValidator> option(char shortcut = '\0', const std::string& help = "") {
+		return Grabber<QuickArgParserInternals::DummyValidator>(this, "", shortcut, help, QuickArgParserInternals::DummyValidator{});
 	}
-	Grabber nonstandardOption(const std::string& name, char shortcut = '\0', const std::string& help = "") {
+	Grabber<QuickArgParserInternals::DummyValidator> nonstandardOption(const std::string& name, char shortcut = '\0', const std::string& help = "") {
 		if (singleton().initialisationState == INITIALISING&& name[0] == '-' && name[1] != '-')
 			singleton().confusingSwitches.push_back(name);
 			
-		return Grabber(this, name, shortcut, help);
+		return Grabber<QuickArgParserInternals::DummyValidator>(this, name, shortcut, help, QuickArgParserInternals::DummyValidator{});
 	}
 
+	template <typename Validator>
 	class ArgGrabberBase {
 	protected:
 		const MainArguments* parent;
 		const int index;
+		Validator validator;
+		template <typename Value>
+		void validate(const Value& value) const {
+			if (!QuickArgParserInternals::ValidatorUser<Validator>::useValidator(validator, value)) {
+				throw QuickArgParserInternals::ArgumentError("Invalid value of argument " + std::to_string(index));
+			}
+		}
 	public:
-		ArgGrabberBase(const MainArguments* parent, int index) : parent(parent), index(index) {}
+		ArgGrabberBase(const MainArguments* parent, int index, const Validator& validator) : parent(parent), index(index), validator(validator) {}
 	};
 
-	template <typename Default>
-	class ArgGrabberDefaulted : public ArgGrabberBase {
+	template <typename Default, typename Validator>
+	class ArgGrabberDefaulted : public ArgGrabberBase<Validator> {
 		Default defaultValue;
+		using Base = ArgGrabberBase<Validator>;
 	public:
-		ArgGrabberDefaulted(const MainArguments* parent, int index, Default defaultValue) :
-				ArgGrabberBase(parent, index), defaultValue(defaultValue) {}
+		ArgGrabberDefaulted(const MainArguments* parent, int index, const Validator& validator, Default defaultValue) :
+				Base(parent, index, validator), defaultValue(defaultValue) {}
 
 		template <typename T>
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
-			if (ArgGrabberBase::parent->singleton().initialisationState == INITIALISING) {
-				ArgGrabberBase::parent->singleton().argumentCountMax =
-						std::max(ArgGrabberBase::parent->singleton().argumentCountMax, ArgGrabberBase::index + 1);
+			if (Base::parent->singleton().initialisationState == INITIALISING) {
+				Base::parent->singleton().argumentCountMax =
+						std::max(Base::parent->singleton().argumentCountMax, Base::index + 1);
 				return QuickArgParserInternals::ArgConverter<T>::makeDefault();
 			}
-			if (ArgGrabberBase::index >= int(ArgGrabberBase::parent->arguments.size()))
+			if (Base::index >= int(Base::parent->arguments.size())) {
+				Base::validate(defaultValue);
 				return defaultValue;
-			return QuickArgParserInternals::ArgConverter<T>::deserialise(
-					ArgGrabberBase::parent->arguments[ArgGrabberBase::index]);
+			}
+			auto obtained = QuickArgParserInternals::ArgConverter<T>::deserialise(
+					Base::parent->arguments[Base::index]);
+			Base::validate(obtained);
+			return obtained;
 		}
 	};
 	
-	struct ArgGrabber : public ArgGrabberBase {
-		using ArgGrabberBase::ArgGrabberBase;
+	template <typename Validator>
+	struct ArgGrabber : public ArgGrabberBase<Validator> {
+		using Base = ArgGrabberBase<Validator>;
+		using Base::ArgGrabberBase;
 		template <typename Default>
-		ArgGrabberDefaulted<Default> operator=(Default defaultValue) const {
-			return ArgGrabberDefaulted<Default>(ArgGrabberBase::parent, ArgGrabberBase::index, defaultValue);
+		ArgGrabberDefaulted<Default, Validator> operator=(Default defaultValue) const {
+			return ArgGrabberDefaulted<Default, Validator>{Base::parent, Base::index, Base::validator, defaultValue};
 		}
 		template <typename T>
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
-			if (ArgGrabberBase::parent->singleton().initialisationState == INITIALISING) {
-				ArgGrabberBase::parent->singleton().argumentCountMin =
-						std::max(ArgGrabberBase::parent->singleton().argumentCountMin, ArgGrabberBase::index + 1);
-				ArgGrabberBase::parent->singleton().argumentCountMax =
-						std::max(ArgGrabberBase::parent->singleton().argumentCountMax, ArgGrabberBase::index + 1);
+			if (Base::parent->singleton().initialisationState == INITIALISING) {
+				Base::parent->singleton().argumentCountMin =
+						std::max(Base::parent->singleton().argumentCountMin, Base::index + 1);
+				Base::parent->singleton().argumentCountMax =
+						std::max(Base::parent->singleton().argumentCountMax, Base::index + 1);
 				return QuickArgParserInternals::ArgConverter<T>::makeDefault();
 			}
-			return QuickArgParserInternals::ArgConverter<T>::deserialise(ArgGrabberBase::parent->arguments[ArgGrabberBase::index]);
+			auto obtained = QuickArgParserInternals::ArgConverter<T>::deserialise(Base::parent->arguments[Base::index]);
+			Base::validate(obtained);
+			return obtained;
+		}
+		
+		template <typename NewValidator>
+		ArgGrabber<NewValidator> validator(const NewValidator& newValidator) {
+			return ArgGrabber<NewValidator>{Base::parent, Base::index, newValidator};
 		}
 	};
 	
-	ArgGrabber argument(int index) {
-		return ArgGrabber(this, index);
+	ArgGrabber<QuickArgParserInternals::DummyValidator> argument(int index) {
+		return ArgGrabber<QuickArgParserInternals::DummyValidator>{this, index, QuickArgParserInternals::DummyValidator{}};
 	}
 };

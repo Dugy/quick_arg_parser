@@ -19,7 +19,7 @@ struct Input2 : MainArguments<Input2> {
 	std::string logFile = argument(1) = "log.log";
 	std::string debugLogFile = argument(2) = "debug.log";
 	Optional<std::string> logAddress = option("logAddress", 'l');
-	int legacyOption = nonstandardOption("-line") = 0;
+	int legacyOption = nonstandardOption("-line").validator([] (int a) { return a < 10; }) = 0;
 	std::string legacyOption2 = nonstandardOption("/tool") = "none";
 
 	static std::string help(const std::string& programName) {
@@ -94,7 +94,9 @@ int main() {
 	verify(*t2.uploads, 3);
 	verify(t2.logFile, "log");
 	verify(t2.debugLogFile, "debug.log");
-	verify(*t2.logAddress, "127.0.0.1");
+	verify(bool(t2.logAddress), true);
+	if (bool(t2.logAddress))
+		verify(*t2.logAddress, "127.0.0.1");
 	verify(t2.legacyOption, 2);
 	verify(t2.legacyOption2, "none");
 
