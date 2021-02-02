@@ -28,7 +28,9 @@ And it can deal with the following call:
 A longer example of usage is [here](https://github.com/Dugy/quick_arg_parser/blob/main/quick_arg_parser_test_manual.cpp).
 
 ## More detailed information
-The library requires C++11. I have tested it on GCC and Clang. It should work on Windows, but the command-line arguments will not be Windows-like. C++11 does not allow aggregate-initialising parent classes, so the child class of `MainArguments` will have to inherit its constructor `using MainArguments<Args>::MainArguments`, allowing to create it with single braces.
+The library requires C++11. I have tested it on GCC and Clang. C++11 does not allow aggregate-initialising parent classes, so the child class of `MainArguments` will have to inherit its constructor `using MainArguments<Args>::MainArguments`, allowing to create it with single braces.
+
+It should work on Windows, but the command-line arguments will be Unix-like (unless explicitly made so, see [below](https://github.com/Dugy/quick_arg_parser#legacy-options)).
 
 It can parse integer types, floating point types, `std::string`, `std::vector` of already supported types (assuming comma separated lists), `shared_ptr` and `unique_ptr` to already supported types. A class called `Optional` has to be used instead of `std::optional` (its usage is similar to `std::optional` and can be implicitly converted to it). If the option is missing, it will be empty, it won't compile with default arguments (except `nullptr` and `std::nullopt`).
 

@@ -329,6 +329,8 @@ class MainArguments {
 		static Singleton instance;
 		return instance;
 	}
+	
+	using DummyValidator = QuickArgParserInternals::DummyValidator;
 public:
 	template <typename T> using Optional = QuickArgParserInternals::Optional<T>;
 	MainArguments() = default;
@@ -552,52 +554,53 @@ protected:
 	template <typename Default, typename Validator>
 	class GrabberDefaulted : public GrabberBase<Validator> {
 		Default defaultValue;
+		using Base = GrabberBase<Validator>;
 	public:
 		GrabberDefaulted(const MainArguments* parent, const std::string& name, char shortcut,
 				const std::string& help, Validator validator, Default defaultValue)
-				: GrabberBase<Validator>(parent, name, shortcut, help, validator), defaultValue(defaultValue) {}
+				: Base(parent, name, shortcut, help, validator), defaultValue(defaultValue) {}
 		template <typename T, typename std::enable_if<!std::is_same<T, bool>::value>::type* = nullptr>
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
-			return GrabberBase<Validator>::template getOption<T>(defaultValue);
+			return Base::template getOption<T>(defaultValue);
 		}
 	};
 	
 	template <typename Validator>
 	class Grabber : public GrabberBase<Validator> {
 		friend class MainArguments;
+		using Base = GrabberBase<Validator>;
 	public:
-		using GrabberBase<Validator>::GrabberBase;
+		using Base::GrabberBase;
 		template <typename Default>
 		GrabberDefaulted<Default, Validator> operator=(Default defaultValue) {
-			return {GrabberBase<Validator>::parent, GrabberBase<Validator>::name, GrabberBase<Validator>::shortcut,
-					GrabberBase<Validator>::help, GrabberBase<Validator>::validator, defaultValue};
+			return {Base::parent, Base::name, Base::shortcut, Base::help, Base::validator, defaultValue};
 		}
 		
 		template <typename T>
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
-			return GrabberBase<Validator>::template getOption<T>(QuickArgParserInternals::ArgConverter<T>::makeDefault());
+			return Base::template getOption<T>(QuickArgParserInternals::ArgConverter<T>::makeDefault());
 		}
 		
 		template <typename NewValidator>
 		Grabber<NewValidator> validator(const NewValidator& newValidator) {
-			return {GrabberBase<Validator>::parent, GrabberBase<Validator>::name, GrabberBase<Validator>::shortcut,
-					GrabberBase<Validator>::help, newValidator};
+			return {Base::parent, Base::name, Base::shortcut,
+					Base::help, newValidator};
 		}
 	};
 
-	Grabber<QuickArgParserInternals::DummyValidator> option(const std::string& name, char shortcut = '\0', const std::string& help = "") {
-		return Grabber<QuickArgParserInternals::DummyValidator>(this, "--" + name, shortcut, help, QuickArgParserInternals::DummyValidator{});
+	Grabber<DummyValidator> option(const std::string& name, char shortcut = '\0', const std::string& help = "") {
+		return Grabber<DummyValidator>(this, "--" + name, shortcut, help, DummyValidator{});
 	}
-	Grabber<QuickArgParserInternals::DummyValidator> option(char shortcut = '\0', const std::string& help = "") {
-		return Grabber<QuickArgParserInternals::DummyValidator>(this, "", shortcut, help, QuickArgParserInternals::DummyValidator{});
+	Grabber<DummyValidator> option(char shortcut = '\0', const std::string& help = "") {
+		return Grabber<DummyValidator>(this, "", shortcut, help, DummyValidator{});
 	}
-	Grabber<QuickArgParserInternals::DummyValidator> nonstandardOption(const std::string& name, char shortcut = '\0', const std::string& help = "") {
-		if (singleton().initialisationState == INITIALISING&& name[0] == '-' && name[1] != '-')
+	Grabber<DummyValidator> nonstandardOption(const std::string& name, char shortcut = '\0', const std::string& help = "") {
+		if (singleton().initialisationState == INITIALISING && name[0] == '-' && name[1] != '-')
 			singleton().confusingSwitches.push_back(name);
 			
-		return Grabber<QuickArgParserInternals::DummyValidator>(this, name, shortcut, help, QuickArgParserInternals::DummyValidator{});
+		return Grabber<DummyValidator>(this, name, shortcut, help, DummyValidator{});
 	}
 
 	template <typename Validator>
@@ -672,7 +675,7 @@ protected:
 		}
 	};
 	
-	ArgGrabber<QuickArgParserInternals::DummyValidator> argument(int index) {
-		return ArgGrabber<QuickArgParserInternals::DummyValidator>{this, index, QuickArgParserInternals::DummyValidator{}};
+	ArgGrabber<DummyValidator> argument(int index) {
+		return ArgGrabber<DummyValidator>{this, index, DummyValidator{}};
 	}
 };
