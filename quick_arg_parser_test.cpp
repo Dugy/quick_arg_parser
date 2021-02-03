@@ -87,8 +87,8 @@ int main() {
 	verify(bool(t1.logPort), false);
 
 	std::cout << "Second input" << std::endl;
-	Input2 t2 = constructFromString<Input2>("mega_program -p 23,80,442 -u 3 --help --version -line 2 --logAddress 127.0.0.1 -- -lame_file_name log");
-	verify(int(t2.ports.size()), 3);
+	Input2 t2 = constructFromString<Input2>("mega_program -p 23,80,442 -u 3 -p 778 --help --version -line 2 --logAddress 127.0.0.1 -- -lame_file_name log");
+	verify(int(t2.ports.size()), 4);
 	verify(t2.file, "-lame_file_name");
 	verify(bool(t2.downloads), false);
 	verify(*t2.uploads, 3);

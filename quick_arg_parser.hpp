@@ -80,14 +80,16 @@ struct ArgConverter<std::vector<T>, typename std::enable_if<ArgConverter<T>::can
 	static std::vector<T> makeDefault() {
 		return {};
 	}
-	static std::vector<T> deserialise(const std::string& from) {
+	static std::vector<T> deserialise(const std::vector<std::string>& from) {
 		std::vector<T> made;
-		int lastPosition = 0;
-		for (int i = 0; i < int(from.size()) + 1; i++) {
-			if (from[i] == ',' || i == int(from.size())) {
-				made.push_back(ArgConverter<T>::deserialise(
-						std::string(from.begin() + lastPosition, from.begin() + i)));
-				lastPosition = i + 1;
+		for (const std::string& part : from) {
+			int lastPosition = 0;
+			for (int i = 0; i < int(part.size()) + 1; i++) {
+				if (part[i] == ',' || i == int(part.size())) {
+					made.push_back(ArgConverter<T>::deserialise(
+							std::string(part.begin() + lastPosition, part.begin() + i)));
+					lastPosition = i + 1;
+				}
 			}
 		}
 		return made;
@@ -200,6 +202,22 @@ struct ArgConverter<std::filesystem::path, void> {
 
 
 template <typename T, typename SFINAE = void>
+struct Demultiplexer {
+	static T deserialise(const std::vector<std::string>& multiplexed) {
+		return ArgConverter<T>::deserialise(multiplexed);
+	}
+};
+
+template <typename T>
+struct Demultiplexer<T, typename std::enable_if<!std::is_void<decltype(ArgConverter<T>::deserialise(std::declval<std::string>()))>::value>::type> {
+	static T deserialise(const std::vector<std::string>& multiplexed) {
+		if (multiplexed.size() > 1)
+			throw ArgumentError("Argument was not expected to appear more than once");
+		return ArgConverter<T>::deserialise(multiplexed[0]);
+	}
+};
+
+template <typename T, typename SFINAE = void>
 struct HelpProvider{
 	template <typename F>
 	static std::string get(const F& ifAbsent, const std::string& programName) {
@@ -309,7 +327,6 @@ class MainArguments {
 	std::string _programName;
 	std::vector<std::string> _argv;
 	
-	constexpr static int NOT_FOUND = -1;
 	enum InitialisationStep {
 		UNINITIALISED,
 		INITIALISING,
@@ -457,7 +474,9 @@ public:
 
 private:
 	
-	int findArgument(const std::string& argument, char shortcut) const {
+	std::vector<std::string> findOption(const std::string& argument, char shortcut) const {
+		std::vector<std::string> collected;
+	
 		// Look for shortcut, end of string means no shortcut
 		if (shortcut != '\0') {
 			for (int i = 0; i < int(_argv.size()); i++) {
@@ -469,7 +488,7 @@ private:
 				if (_argv[i][0] == '-' && _argv[i][1] != '-') {
 					for (int j = 1; _argv[i][j] != '\0'; j++) {
 						if (_argv[i][j] == shortcut) {
-							return i + 1;
+							collected.push_back(_argv[i + 1]);
 						}
 					}
 				}
@@ -485,12 +504,12 @@ private:
 		if (!argument.empty()) {
 			for (int i = 0; i < int(_argv.size()); i++) {
 				if (_argv[i] == argument) {
-					return i + 1;
+					collected.push_back(_argv[i + 1]);
 				}
 			}
 		}
 		
-		return NOT_FOUND;
+		return collected;
 	}
 	
 protected:	
@@ -523,7 +542,7 @@ protected:
 				addHelpEntry();
 				return false;
 			}
-			return parent->findArgument(name, shortcut) != NOT_FOUND;
+			return !parent->findOption(name, shortcut).empty();
 		}
 
 		template <typename T>
@@ -539,10 +558,10 @@ protected:
 					throw QuickArgParserInternals::ArgumentError("Invalid value of argument " + name);
 				}
 			};
-			int position = parent->findArgument(name, shortcut);
+			const auto found = parent->findOption(name, shortcut);
 			
-			if (position != NOT_FOUND) {
-				auto obtained = QuickArgParserInternals::ArgConverter<T>::deserialise(parent->_argv[position]);
+			if (!found.empty()) {
+				auto obtained = QuickArgParserInternals::Demultiplexer<T>::deserialise(found);
 				validate(obtained);
 				return obtained;
 			}

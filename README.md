@@ -28,11 +28,22 @@ And it can deal with the following call:
 A longer example of usage is [here](https://github.com/Dugy/quick_arg_parser/blob/main/quick_arg_parser_test_manual.cpp).
 
 ## More detailed information
-The library requires C++11. I have tested it on GCC and Clang. C++11 does not allow aggregate-initialising parent classes, so the child class of `MainArguments` will have to inherit its constructor `using MainArguments<Args>::MainArguments`, allowing to create it with single braces.
+The library requires C++11. I have tested it on GCC and Clang. C++11 does not allow aggregate-initialising parent classes, so the child class of `MainArguments` will have to inherit its constructor `using MainArguments<Args>::MainArguments`, allowing to create instances without double braces.
 
-It should work on Windows, but the command-line arguments will be Unix-like (unless explicitly made so, see [below](https://github.com/Dugy/quick_arg_parser#legacy-options)).
+It should work on Windows, but the command-line arguments will be Unix-like (unless explicitly made different, see [below](https://github.com/Dugy/quick_arg_parser#legacy-options)).
 
-It can parse integer types, floating point types, `std::string`, `std::vector` of already supported types (assuming comma separated lists), `shared_ptr` and `unique_ptr` to already supported types. A class called `Optional` has to be used instead of `std::optional` (its usage is similar to `std::optional` and can be implicitly converted to it). If the option is missing, it will be empty, it won't compile with default arguments (except `nullptr` and `std::nullopt`).
+It can parse:
+* integer types
+* floating point types
+* `std::string`
+* `std::filesystem::path` (if C++17 is available)
+* `std::vector` containing types that it can parse, expecting them to set multiple times (options only) or comma-separated
+* `std::shared_ptr` to types it can parse
+* `std::unique_ptr` to types it can parse
+* `Optional` (a clone of `std::optional` that can be implicitly converted to it if C++17 is available) of types it can parse
+* custom types if a parser for them is added, see [below](https://github.com/Dugy/quick_arg_parser#custom-types)).
+
+A class called `Optional` has to be used instead of `std::optional` (its usage is similar to `std::optional` and can be implicitly converted to it). If the option is missing, it will be empty; it won't compile with default arguments (except `nullptr` and `std::nullopt`).
 
 Options are declared as follows:
 ```C++
