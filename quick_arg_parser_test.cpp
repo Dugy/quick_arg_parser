@@ -2,7 +2,7 @@
 #include "quick_arg_parser.hpp"
 
 struct Input : MainArguments<Input> {
-	using MainArguments<Input>::MainArguments;
+	using MainArguments<Input>::MainArguments; // Not necessary in C++17
 	bool verbose = option("verbose", 'V');
 	int port = option("port", 'p');
 	int secondaryPort = option("port2", 'P') = 999;
@@ -51,7 +51,17 @@ struct Input3 : MainArguments<Input3> {
 	static std::string version;
 	void onVersion() {}
 };
-std::string Input3::version = "1.0";
+std::string Input3::version = "1.0"; // Not necessary in C++17
+
+struct Input4 : MainArguments<Input4> {
+	using MainArguments<Input4>::MainArguments;
+	std::vector<int> outputConnectors = option("connectors", 'c');
+	std::string genre = option("genre", 'g') = "metal";
+	float volume = option("volume", 'v') = 100;
+	bool muteNeighbours = option("mute_neighbours", 'm');
+	bool jamPhones = option("jam_phones", 'j');
+	std::string path = argument(0) = ".";
+};
 
 template <typename T>
 T constructFromString(std::string args) {
@@ -108,6 +118,20 @@ int main() {
 	verify(t3.enableHorns, true);
 	verify(t3.target, "target");
 	verify(t3.loud, true);
+	
+	std::cout << "Fourth input" << std::endl;
+	Input4 t4 = constructFromString<Input4>("ultimate_program -v110 -jc=5 --connectors=8 -mc 10 -gpunk ~/Music");
+	verify(int(t4.outputConnectors.size()), 3);
+	if (int(t4.outputConnectors.size()) == 3) {
+		verify(t4.outputConnectors[0], 5);
+		verify(t4.outputConnectors[1], 8);
+		verify(t4.outputConnectors[2], 10);
+	}
+	verify(t4.genre, "punk");
+	verify(t4.volume, 110);
+	verify(t4.muteNeighbours, true);
+	verify(t4.jamPhones, true);
+	verify(t4.path, "~/Music");
 
 	std::cout << "Errors: " << errors << std::endl;
 }

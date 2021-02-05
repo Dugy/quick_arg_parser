@@ -375,10 +375,21 @@ public:
 				}
 				return false;
 			};
-			auto isListedAsString = [] (const std::string& arg, const std::vector<std::pair<std::string, char>>& switches) {
+			auto isListedAsString = [] (const std::string& arg, const std::vector<std::pair<std::string, char>>& switches, bool unary, bool& skipsNext) {
 				for (const auto& it : switches) {
-					if (it.first == arg)
+					for (int i = 0; i < int(it.first.size()); i++) {
+						if (arg[i] != it.first[i])
+							goto noMatch;
+					}
+					if (arg.size() == it.first.size()) {
+						skipsNext = true;
 						return true;
+					}
+					if (unary && arg[it.first.size()] == '=') {
+						skipsNext = false;
+						return true;
+					}
+					noMatch:;
 				}
 				return false;
 			};
@@ -401,21 +412,23 @@ public:
 				if (switchesEnabled) {
 					if (_argv[i] == "--help") {
 						printHelp();
-						continue;
+						goto nextArg;
 					}
 					if (_argv[i] == "--version") {
 						if (printVersion())
-							continue;
+							goto nextArg;
 					}
 					if (_argv[i] == "--") {
 						switchesEnabled = false;
-						continue;
+						goto nextArg;
 					}
-					if (isListedAsString(_argv[i], singleton().unarySwitches)) {
-						i++; // The next argument is part of the switch
-						continue;
-					} else if (isListedAsString(_argv[i], singleton().nullarySwitches)) {
-						continue;
+					bool skipsNext = false;
+					if (isListedAsString(_argv[i], singleton().unarySwitches, true, skipsNext)) {
+						if (skipsNext)
+							i++; // The next argument is part of the switch
+						goto nextArg;
+					} else if (isListedAsString(_argv[i], singleton().nullarySwitches, false, skipsNext)) {
+						goto nextArg;
 					}
 					
 					
@@ -428,38 +441,34 @@ public:
 							// Is an argument of type -x
 							if (_argv[i][1] == '?') {
 								printHelp();
-								continue;
+									goto nextArg;
 							}
 							if (_argv[i][1] == 'V') {
 								if (printVersion())
-									continue;
+									goto nextArg;
 							}
-							
-							if (isListedAsChar(_argv[i][1], singleton().unarySwitches)) {
-								i++; // The next argument is part of the switch
-								continue;
-							} else if (!isListedAsChar(_argv[i][1], singleton().nullarySwitches)) {
-								throw ArgumentError(std::string("Unknown switch ") + _argv[i][1]);
-							}
-							continue; // Otherwise it's a bool switch that can be ignored
-						} else {
-							// Some validations that all massed single letter switches don't have arguments
-							for (int j = 1; j < int(_argv[i].size()); j++) {
-								if (!isListedAsChar(_argv[i][j], singleton().nullarySwitches)) {
-									if (isListedAsChar(_argv[i][j], singleton().unarySwitches))
-										throw ArgumentError("Switch group " + _argv[i]
-												+ " contains a switch that needs an argument");
-									else
-										throw ArgumentError(std::string("Unknown switch ") + _argv[i][j]);
-								}
-							}
-							continue;
 						}
+						
+						// Some validations that all massed single letter switches
+						for (int j = 1; j < int(_argv[i].size()); j++) {
+							if (isListedAsChar(_argv[i][j], singleton().unarySwitches)) {
+								if (j == int(_argv[i].size()) - 1) {
+									i++; // The next argument is part of the switch
+								}	
+								goto nextArg;
+							}
+							if (!isListedAsChar(_argv[i][j], singleton().nullarySwitches)) {
+								throw ArgumentError(std::string("Unknown switch ") + _argv[i][j]);
+							}
+						}
+						goto nextArg;
 					}
 				}
 				
 				// Is not a switch, continue was not used
 				arguments.push_back(_argv[i]);
+				
+				nextArg:;
 			}
 
 			if (int(arguments.size()) < singleton().argumentCountMin)
@@ -475,20 +484,33 @@ public:
 private:
 	
 	std::vector<std::string> findOption(const std::string& argument, char shortcut) const {
+		// This returns hogwash if the option is bool, but in that case, we only care that the vector is not empty
 		std::vector<std::string> collected;
+		auto matches = [&] (const std::string& matched, int argument) {
+			for (int i = 0; i < int(matched.size()); i++) {
+				if (matched[i] != _argv[argument][i])
+					return false;
+			}
+			return matched.size() == _argv[argument].size() || _argv[argument][matched.size()] == '=';
+		};
 	
-		// Look for shortcut, end of string means no shortcut
-		if (shortcut != '\0') {
-			for (int i = 0; i < int(_argv.size()); i++) {
+		for (int i = 0; i < int(_argv.size()); i++) {
+			// Look for shortcut, end of string means no shortcut
+			if (shortcut != '\0') {
 				// Skip this if it is a strange switch starting with a single dash
 				for (const auto& it : singleton().confusingSwitches)
-					if (_argv[i] == it)
+					if (matches(it, i))
 						goto skipThisOne;
 				
 				if (_argv[i][0] == '-' && _argv[i][1] != '-') {
 					for (int j = 1; _argv[i][j] != '\0'; j++) {
 						if (_argv[i][j] == shortcut) {
-							collected.push_back(_argv[i + 1]);
+							if (_argv[i][j + 1] == '\0') // Last letter, argument follows
+								collected.push_back(_argv[std::min<int>(i + 1, _argv.size() - 1)]);
+							else if (_argv[i][j + 1] == '=') // Argument value not sperated
+								collected.push_back(_argv[i].substr(j + 2));
+							else
+								collected.push_back(_argv[i].substr(j + 1));
 						}
 					}
 				}
@@ -498,13 +520,14 @@ private:
 				
 				skipThisOne:;
 			}
-		}
-		
-		// Look for full argument name, empty means no full argument name
-		if (!argument.empty()) {
-			for (int i = 0; i < int(_argv.size()); i++) {
-				if (_argv[i] == argument) {
-					collected.push_back(_argv[i + 1]);
+			
+			// Look for full argument name, empty means no full argument name
+			if (!argument.empty()) {
+				if (matches(argument, i)) {
+					if (_argv[i].size() > argument.size() && _argv[i][argument.size()] == '=')
+						collected.push_back(_argv[i].substr(argument.size() + 1));
+					else
+						collected.push_back(_argv[i + 1]);
 				}
 			}
 		}

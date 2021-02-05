@@ -9,6 +9,7 @@ struct Args : MainArguments<Args> {
 	std::string folder = argument(0) = ".";
 	int efficiency = option("efficiency", 'e', "The intended efficiency") = 5;
 	bool verbose = option('v');
+	std::vector<int> ports = option("port", p);
 };
 
 int main(int argc, char** argv) {
@@ -22,7 +23,7 @@ int main(int argc, char** argv) {
 
 And it can deal with the following call:
 ```
-./a.out . --efficiency 9 -v
+./a.out . --efficiency 9 -v -p 4242,6824
 ```
 
 A longer example of usage is [here](https://github.com/Dugy/quick_arg_parser/blob/main/quick_arg_parser_test_manual.cpp).
@@ -41,7 +42,7 @@ It can parse:
 * `std::shared_ptr` to types it can parse
 * `std::unique_ptr` to types it can parse
 * `Optional` (a clone of `std::optional` that can be implicitly converted to it if C++17 is available) of types it can parse
-* custom types if a parser for them is added, see [below](https://github.com/Dugy/quick_arg_parser#custom-types)).
+* custom types if a parser for them is added (see [below](https://github.com/Dugy/quick_arg_parser#custom-types))
 
 A class called `Optional` has to be used instead of `std::optional` (its usage is similar to `std::optional` and can be implicitly converted to it). If the option is missing, it will be empty; it won't compile with default arguments (except `nullptr` and `std::nullopt`).
 
@@ -96,6 +97,8 @@ Sometimes, it's necessary to support options like `-something` or `/something`. 
 	int speed = nonstandardOption("-efficiency", 'e');
 ```
 If this is done, the long option will not be expected to be exactly as listed in the first argument, not preceded by a double dash. If it starts with a single dash, it will not be considered an aggregate of short options.
+
+For compatibility with atypical command line interfaces, setting an argument `-p` to `1024` can be done not only as `-p 1024`, but also as `-p=1024` or `-p1024`. Also, if it's a long argument named `--port`, it can be written as `--port=1024`. A vector type argument can be alternatively written as multiple settings of the same option, for example `-p 1024 -p1025`.
 
 ## Custom types
 To support your custom class (called `MyType` here), define this somewhere before the definition of the parsing class:
