@@ -568,6 +568,15 @@ protected:
 			return !parent->findOption(name, shortcut).empty();
 		}
 
+		operator std::vector<bool>() const {
+			if (parent->singleton().initialisationState == INITIALISING) {
+				parent->singleton().nullarySwitches.push_back(std::make_pair(name, shortcut));
+				addHelpEntry();
+				return std::vector<bool>();
+			}
+			return std::vector<bool>(parent->findOption(name, shortcut).size(), true);
+		}
+
 		template <typename T>
 		T getOption(T defaultValue) const {
 			if (parent->singleton().initialisationState == INITIALISING) {
