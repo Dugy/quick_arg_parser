@@ -63,6 +63,16 @@ struct Input4 : MainArguments<Input4> {
 	std::string path = argument(0) = ".";
 };
 
+struct Input5 : MainArguments<Input5> {
+	using MainArguments<Input5>::MainArguments; // Not necessary in C++17
+	std::vector<bool> verbose = option("verbose", 'V');
+	bool extra = option("extra", 'e');
+	int port = option("port", 'p');
+	int secondaryPort = option("port2", 'P') = 999;
+	int parts = argument(0) = 1;
+	Optional<int> logPort = option("logPort", 'l');
+};
+
 template <typename T>
 T constructFromString(std::string args) {
 	std::vector<char*> segments;
@@ -132,6 +142,15 @@ int main() {
 	verify(t4.muteNeighbours, true);
 	verify(t4.jamPhones, true);
 	verify(t4.path, "~/Music");
+
+	std::cout << "Fifth input" << std::endl;
+	Input5 t5 = constructFromString<Input5>("super_program -VV -VeVV --port 666 -- 3");
+	verify(t5.verbose.size(), 5);
+	verify(t5.extra, true);
+	verify(t5.port, 666);
+	verify(t5.secondaryPort, 999);
+	verify(t5.parts, 3);
+	verify(bool(t5.logPort), false);
 
 	std::cout << "Errors: " << errors << std::endl;
 }
