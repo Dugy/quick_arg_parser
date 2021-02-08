@@ -145,7 +145,7 @@ int main() {
 
 	std::cout << "Fifth input" << std::endl;
 	Input5 t5 = constructFromString<Input5>("super_program -VV -VeVV --port 666 -- 3");
-	verify(t5.verbose.size(), 5);
+	verify(int(t5.verbose.size()), 5);
 	verify(t5.extra, true);
 	verify(t5.port, 666);
 	verify(t5.secondaryPort, 999);

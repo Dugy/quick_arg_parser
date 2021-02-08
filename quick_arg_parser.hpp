@@ -297,6 +297,22 @@ struct OnVersionCallback<T, typename std::enable_if<std::is_void<decltype(std::d
 	}	
 };
 
+#if _MSC_VER && !__INTEL_COMPILER
+	// MSVC likes converting const char* literals to initialiser lists and causing ambiguous calls with it
+	template <class T>
+	struct IsInitializerList : std::false_type {};
+
+	template <class T>
+	struct IsInitializerList<std::initializer_list<T>> : std::true_type {};
+	
+	template <class T, typename SFINAE = void>
+	struct StringFilterOk : std::false_type {};
+	
+	template <class T>
+	struct StringFilterOk<T, typename std::enable_if<(std::is_class<T>::value && !IsInitializerList<T>::value) || std::is_arithmetic<T>::value
+			|| std::is_floating_point<T>::value || std::is_enum<T>::value>::type> : std::true_type {};
+#endif
+
 struct DummyValidator{};
 
 template <typename Validator, typename SFINAE = void>
@@ -576,8 +592,12 @@ protected:
 			}
 			return std::vector<bool>(parent->findOption(name, shortcut).size(), true);
 		}
-
+		
+#if _MSC_VER && !__INTEL_COMPILER
+		template <typename T, typename std::enable_if<QuickArgParserInternals::StringFilterOk<T>::value>::type* = nullptr>
+#else
 		template <typename T>
+#endif
 		T getOption(T defaultValue) const {
 			if (parent->singleton().initialisationState == INITIALISING) {
 				parent->singleton().unarySwitches.push_back(std::make_pair(name, shortcut));
@@ -610,7 +630,12 @@ protected:
 		GrabberDefaulted(const MainArguments* parent, const std::string& name, char shortcut,
 				const std::string& help, Validator validator, Default defaultValue)
 				: Base(parent, name, shortcut, help, validator), defaultValue(defaultValue) {}
+#if _MSC_VER && !__INTEL_COMPILER
+		template <typename T, typename std::enable_if<QuickArgParserInternals::StringFilterOk<T>::value
+				&& !std::is_same<T, bool>::value>::type* = nullptr>
+#else
 		template <typename T, typename std::enable_if<!std::is_same<T, bool>::value>::type* = nullptr>
+#endif
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
 			return Base::template getOption<T>(defaultValue);
@@ -628,7 +653,11 @@ protected:
 			return {Base::parent, Base::name, Base::shortcut, Base::help, Base::validator, defaultValue};
 		}
 		
+#if _MSC_VER && !__INTEL_COMPILER
+		template <typename T, typename std::enable_if<QuickArgParserInternals::StringFilterOk<T>::value>::type* = nullptr>
+#else
 		template <typename T>
+#endif
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
 			return Base::template getOption<T>(QuickArgParserInternals::ArgConverter<T>::makeDefault());
@@ -677,8 +706,12 @@ protected:
 	public:
 		ArgGrabberDefaulted(const MainArguments* parent, int index, const Validator& validator, Default defaultValue) :
 				Base(parent, index, validator), defaultValue(defaultValue) {}
-
+				
+#if _MSC_VER && !__INTEL_COMPILER
+		template <typename T, typename std::enable_if<QuickArgParserInternals::StringFilterOk<T>::value>::type* = nullptr>
+#else
 		template <typename T>
+#endif
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
 			if (Base::parent->singleton().initialisationState == INITIALISING) {
@@ -705,7 +738,12 @@ protected:
 		ArgGrabberDefaulted<Default, Validator> operator=(Default defaultValue) const {
 			return ArgGrabberDefaulted<Default, Validator>{Base::parent, Base::index, Base::validator, defaultValue};
 		}
+		
+#if _MSC_VER && !__INTEL_COMPILER
+		template <typename T, typename std::enable_if<QuickArgParserInternals::StringFilterOk<T>::value>::type* = nullptr>
+#else
 		template <typename T>
+#endif
 		operator T() const {
 			static_assert(QuickArgParserInternals::ArgConverter<T>::canDo, "Cannot deserialise into this type");
 			if (Base::parent->singleton().initialisationState == INITIALISING) {
