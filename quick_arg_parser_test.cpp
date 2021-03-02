@@ -57,7 +57,8 @@ struct Input4 : MainArguments<Input4> {
 	using MainArguments<Input4>::MainArguments;
 	std::vector<int> outputConnectors = option("connectors", 'c');
 	std::string genre = option("genre", 'g') = "metal";
-	float volume = option("volume", 'v') = 100;
+	float masterVolume = option("master_volume", 'v') = 100;
+	std::unordered_map<std::string, float> speakerVolumes = option("speaker_volumes", 's');
 	bool muteNeighbours = option("mute_neighbours", 'm');
 	bool jamPhones = option("jam_phones", 'j');
 	std::string path = argument(0) = ".";
@@ -111,6 +112,7 @@ int main() {
 	verify(int(t2.ports.size()), 4);
 	verify(t2.file, "-lame_file_name");
 	verify(bool(t2.downloads), false);
+	verify(bool(t2.uploads), true);
 	verify(*t2.uploads, 3);
 	verify(t2.logFile, "log");
 	verify(t2.debugLogFile, "debug.log");
@@ -130,7 +132,7 @@ int main() {
 	verify(t3.loud, true);
 	
 	std::cout << "Fourth input" << std::endl;
-	Input4 t4 = constructFromString<Input4>("ultimate_program -v110 -jc=5 --connectors=8 -mc 10 -gpunk ~/Music");
+	Input4 t4 = constructFromString<Input4>("ultimate_program -v110 -jc=5 --connectors=8 -mc 10 -sleft=110 -sright=105,bottom=115 -gpunk ~/Music");
 	verify(int(t4.outputConnectors.size()), 3);
 	if (int(t4.outputConnectors.size()) == 3) {
 		verify(t4.outputConnectors[0], 5);
@@ -138,7 +140,7 @@ int main() {
 		verify(t4.outputConnectors[2], 10);
 	}
 	verify(t4.genre, "punk");
-	verify(t4.volume, 110);
+	verify(t4.masterVolume, 110);
 	verify(t4.muteNeighbours, true);
 	verify(t4.jamPhones, true);
 	verify(t4.path, "~/Music");

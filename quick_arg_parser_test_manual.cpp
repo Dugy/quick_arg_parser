@@ -7,6 +7,7 @@ struct Input : MainArguments<Input> {
 	int port = option("port", 'p').validator([] (int port) { return port > 1023; });
 	float timeout = option("timeout", 't', "Timeout in seconds");
 	Optional<std::string> debugLog = option("debug_log", 'd');
+	std::unordered_map<std::string, int> priorities = option("priorities", 'P');
 	
 	std::filesystem::path file = argument(0);
 	std::filesystem::path secondaryFile = argument(1) = "aux.out";
@@ -32,4 +33,8 @@ int main(int argc, char** argv) {
 	std::cout << "File: " << in.file << std::endl;
 	std::cout << "Secondary file: " << in.secondaryFile << std::endl;
 	std::cout << "Rotation: " << in.rotation << std::endl;
+	
+	for (auto& it : in.priorities) {
+		std::cout << "Priorities[" << it.first << "]=" << it.second << std::endl;
+	}
 }

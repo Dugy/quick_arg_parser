@@ -3,6 +3,7 @@
 #include <sstream>
 #include <memory>
 #include <array>
+#include <unordered_map>
 
 #if __cplusplus > 201402L
 #include <filesystem>
@@ -88,6 +89,31 @@ struct ArgConverter<std::vector<T>, typename std::enable_if<ArgConverter<T>::can
 				if (part[i] == ',' || i == int(part.size())) {
 					made.push_back(ArgConverter<T>::deserialise(
 							std::string(part.begin() + lastPosition, part.begin() + i)));
+					lastPosition = i + 1;
+				}
+			}
+		}
+		return made;
+	}
+	constexpr static bool canDo = true;
+};
+
+template <typename T>
+struct ArgConverter<std::unordered_map<std::string, T>, typename std::enable_if<ArgConverter<T>::canDo>::type> {
+	static std::unordered_map<std::string, T> makeDefault() {
+		return {};
+	}
+	static std::unordered_map<std::string, T> deserialise(const std::vector<std::string>& from) {
+		std::unordered_map<std::string, T> made;
+		for (const std::string& part : from) {
+			int lastPosition = 0;
+			for (int i = 0; i < int(part.size()) + 1; i++) {
+				if (part[i] == ',' || i == int(part.size())) {
+					std::string section = std::string(part.begin() + lastPosition, part.begin() + i);
+					auto separator = section.find('=');
+					if (separator == std::string::npos)
+						throw ArgumentError("Argument is expected to be a comma separated list of name-value pairs separated by '='");
+					made[section.substr(0, separator)] = ArgConverter<T>::deserialise(section.substr(separator + 1));
 					lastPosition = i + 1;
 				}
 			}
@@ -212,7 +238,7 @@ template <typename T>
 struct Demultiplexer<T, typename std::enable_if<!std::is_void<decltype(ArgConverter<T>::deserialise(std::declval<std::string>()))>::value>::type> {
 	static T deserialise(const std::vector<std::string>& multiplexed) {
 		if (multiplexed.size() > 1)
-			throw ArgumentError("Argument was not expected to appear more than once");
+			throw ArgumentError("Argument was not expected to appear more than once (" + multiplexed[1] + " is excessive)");
 		return ArgConverter<T>::deserialise(multiplexed[0]);
 	}
 };
@@ -528,6 +554,10 @@ private:
 							else
 								collected.push_back(_argv[i].substr(j + 1));
 						}
+						
+						for (auto& it : singleton().unarySwitches)
+							if (it.second == _argv[i][j])
+								goto skipThisOne; // It is a switch followed by arguments
 					}
 				}
 				if (_argv[i] == "--") {

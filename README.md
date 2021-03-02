@@ -39,6 +39,7 @@ It can parse:
 * `std::string`
 * `std::filesystem::path` (if C++17 is available)
 * `std::vector` containing types that it can parse, expecting them to set multiple times (options only) or comma-separated
+* `std::unordered_map` indexed by `std::string` and containing types it can parse, expecting to be set as `-pjob=3,work=5 -ptask=7`
 * `std::shared_ptr` to types it can parse
 * `std::unique_ptr` to types it can parse
 * `Optional` (a clone of `std::optional` that can be implicitly converted to it if C++17 is available) of types it can parse
