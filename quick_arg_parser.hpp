@@ -573,7 +573,7 @@ private:
 					if (_argv[i].size() > argument.size() && _argv[i][argument.size()] == '=')
 						collected.push_back(_argv[i].substr(argument.size() + 1));
 					else
-						collected.push_back(_argv[i + 1]);
+						collected.push_back(_argv[std::min<int>(i + 1, _argv.size() - 1)]);
 				}
 			}
 		}
